@@ -63,36 +63,55 @@ func main() {
 
 		// 2. 遍历每条告警，转换格式并推送到 Gotify
 		for _, alert := range alertData.Alerts {
-			// 提取关键信息（处理空值，避免 panic）
+			// 提取关键信息
 			alertName := getMapValue(alert.Labels, "alertname", "未知告警")
 			severity := getMapValue(alert.Labels, "severity", "unknown")
 			summary := getMapValue(alert.Annotations, "summary", "无摘要")
 			description := getMapValue(alert.Annotations, "description", "无详情")
-			status := strings.ToUpper(alert.Status) // 转为大写（FIRING/RESOLVED）
+			status := strings.ToUpper(alert.Status)
 
-			// 3. 映射优先级（根据 severity 调整）
-			priority := 5 // 默认优先级
+			// 优先级映射
+			priority := 5
+			severityText := "未知"
 			switch strings.ToLower(severity) {
 			case "critical":
-				priority = 8 // 严重告警优先级高
+				priority = 8
+				severityText = "严重"
 			case "warning":
 				priority = 5
+				severityText = "警告"
 			case "info":
-				priority = 3 // 信息类优先级低
+				priority = 3
+				severityText = "信息"
 			}
 
-			// 4. 格式化时间（将 ISO 8601 转为本地时间，更易读）
+			// 状态翻译
+			statusText := "未知"
+			if status == "FIRING" {
+				statusText = "触发"
+			} else if status == "RESOLVED" {
+				statusText = "恢复"
+			}
+
+			// 时间格式
 			startTime := formatTime(alert.StartsAt)
 			endTime := formatTime(alert.EndsAt)
-			timeStr := fmt.Sprintf("触发时间: %s", startTime)
+			triggerTime := startTime
 			if status == "RESOLVED" && endTime != "" {
-				timeStr = fmt.Sprintf("恢复时间: %s", endTime)
+				triggerTime = endTime
 			}
 
-			// 5. 构造 Gotify 消息
+			// 构造美化后的 Gotify 消息
+			msgBuilder := strings.Builder{}
+			msgBuilder.WriteString(fmt.Sprintf("告警级别：%s\n", severityText))
+			msgBuilder.WriteString(fmt.Sprintf("告警状态：%s\n", statusText))
+			msgBuilder.WriteString(fmt.Sprintf("摘要：%s\n", summary))
+			msgBuilder.WriteString(fmt.Sprintf("描述：%s\n", description))
+			msgBuilder.WriteString(fmt.Sprintf("触发时间：%s", triggerTime))
+
 			gotifyMsg := GotifyPayload{
-				Title:    fmt.Sprintf("[%s] %s (%s)", severity, alertName, status),
-				Message:  fmt.Sprintf("%s\n%s\n%s", summary, description, timeStr),
+				Title:    alertName, // 大标题独占
+				Message:  msgBuilder.String(),
 				Priority: priority,
 			}
 
